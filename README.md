@@ -1,5 +1,7 @@
 # mini-projects
 
+[![CI](https://github.com/MattD365/mini-projects/actions/workflows/ci.yml/badge.svg)](https://github.com/MattD365/mini-projects/actions/workflows/ci.yml)
+
 Three small programs, each finished, each dependency-free. Plain Node (18+) or a plain
 browser — there is nothing to install.
 

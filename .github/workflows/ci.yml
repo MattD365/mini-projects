@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Syntax-check every script
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: node --check every .js / .mjs file
+        run: |
+          set -e
+          found=0
+          while IFS= read -r file; do
+            node --check "$file"
+            echo "ok  $file"
+            found=1
+          done < <(find . -name '*.js' -o -name '*.mjs')
+          [ "$found" = "1" ] || { echo "no scripts found"; exit 1; }
+      - name: The one rule - no package.json, no dependencies
+        run: |
+          if find . -name package.json | grep -q .; then
+            echo "::error::package.json found - this repo is dependency-free by design."
+            exit 1
+          fi
+          echo "Still dependency-free."
