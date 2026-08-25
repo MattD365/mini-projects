@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Game of Life</title>
+<style>
+  :root { --bg:#10141a; --panel:#1a2029; --ink:#dbe4ee; --muted:#7c8894; --cell:#5ad18a; --grid:#232b36; --accent:#5ad18a; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; display:flex; flex-direction:column; align-items:center; min-height:100vh; }
+  h1 { font-size:18px; letter-spacing:.14em; text-transform:uppercase; font-weight:600; margin:18px 0 4px; }
+  p.hint { color:var(--muted); margin:0 0 14px; font-size:13px; }
+  #board { border:1px solid var(--grid); border-radius:6px; cursor:crosshair; touch-action:none; max-width:96vw; }
+  .controls { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin:14px 0 8px; }
+  button, select { font:600 13px system-ui, sans-serif; background:var(--panel); color:var(--ink); border:1px solid var(--grid); border-radius:6px; padding:8px 14px; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  button.primary { background:var(--accent); color:#0b1210; border-color:var(--accent); }
+  label.speed { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px; }
+  #stats { color:var(--muted); font-size:13px; margin-bottom:18px; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<h1>Conway's Game of Life</h1>
+<p class="hint">Draw with the mouse (drag to paint). Space = play/pause &nbsp;·&nbsp; S = step &nbsp;·&nbsp; R = random &nbsp;·&nbsp; C = clear</p>
+<canvas id="board" width="960" height="560" aria-label="Game of Life board"></canvas>
+<div class="controls">
+  <button class="primary" id="play">▶ Play</button>
+  <button id="step">Step</button>
+  <button id="random">Random</button>
+  <button id="clear">Clear</button>
+  <select id="pattern" aria-label="Seed a pattern">
+    <option value="">Seed a pattern…</option>
+    <option value="glider">Glider</option>
+    <option value="gun">Gosper glider gun</option>
+    <option value="pulsar">Pulsar</option>
+    <option value="rpent">R-pentomino</option>
+  </select>
+  <label class="speed">speed <input id="speed" type="range" min="1" max="30" value="12" aria-label="Speed"></label>
+</div>
+<div id="stats">generation 0 · population 0</div>
+<script>
+(() => {
+  const CELL = 8, COLS = 120, ROWS = 70;
+  const cv = document.getElementById('board'); const cx = cv.getContext('2d');
+  cv.width = COLS * CELL; cv.height = ROWS * CELL;
+  let grid = new Uint8Array(COLS * ROWS), gen = 0, running = false, fps = 12, acc = 0, last = 0;
+
+  const PATTERNS = {
+    glider: [[1,0],[2,1],[0,2],[1,2],[2,2]],
+    rpent:  [[1,0],[2,0],[0,1],[1,1],[1,2]],
+    pulsar: (() => { const seg=[2,3,4,8,9,10]; const p=[]; for (const x of seg){ for (const y of [0,5,7,12]) p.push([x,y]); } for (const y of seg){ for (const x of [0,5,7,12]) p.push([x,y]); } return p; })(),
+    gun: [[24,0],[22,1],[24,1],[12,2],[13,2],[20,2],[21,2],[34,2],[35,2],[11,3],[15,3],[20,3],[21,3],[34,3],[35,3],[0,4],[1,4],[10,4],[16,4],[20,4],[21,4],[0,5],[1,5],[10,5],[14,5],[16,5],[17,5],[22,5],[24,5],[10,6],[16,6],[24,6],[11,7],[15,7],[12,8],[13,8]],
+  };
+
+  const idx = (x, y) => ((y + ROWS) % ROWS) * COLS + ((x + COLS) % COLS);
+
+  function stepOnce() {
+    const next = new Uint8Array(COLS * ROWS);
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++)
+        if (dx || dy) n += grid[idx(x + dx, y + dy)];
+      const alive = grid[idx(x, y)];
+      next[idx(x, y)] = (alive && (n === 2 || n === 3)) || (!alive && n === 3) ? 1 : 0;
+    }
+    grid = next; gen++;
+  }
+
+  function draw() {
+    cx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg') || '#10141a';
+    cx.fillRect(0, 0, cv.width, cv.height);
+    cx.fillStyle = '#5ad18a';
+    let pop = 0;
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++)
+      if (grid[y * COLS + x]) { pop++; cx.fillRect(x * CELL + 1, y * CELL + 1, CELL - 2, CELL - 2); }
+    document.getElementById('stats').textContent = `generation ${gen} · population ${pop}`;
+  }
+
+  function loop(t) {
+    requestAnimationFrame(loop);
+    if (!running) return;
+    acc += (t - last); last = t;
+    const interval = 1000 / fps;
+    while (acc >= interval) { stepOnce(); acc -= interval; }
+    draw();
+  }
+  requestAnimationFrame(t => { last = t; requestAnimationFrame(loop); });
+
+  // painting
+  let painting = false, paintVal = 1;
+  const cellAt = e => {
+    const r = cv.getBoundingClientRect();
+    const scale = cv.width / r.width;
+    return [Math.floor((e.clientX - r.left) * scale / CELL), Math.floor((e.clientY - r.top) * scale / CELL)];
+  };
+  cv.addEventListener('pointerdown', e => { const [x, y] = cellAt(e); paintVal = grid[idx(x, y)] ? 0 : 1; grid[idx(x, y)] = paintVal; painting = true; draw(); });
+  cv.addEventListener('pointermove', e => { if (!painting) return; const [x, y] = cellAt(e); grid[idx(x, y)] = paintVal; draw(); });
+  window.addEventListener('pointerup', () => painting = false);
+
+  // controls
+  const playBtn = document.getElementById('play');
+  const setRunning = v => { running = v; playBtn.textContent = v ? '⏸ Pause' : '▶ Play'; };
+  playBtn.onclick = () => setRunning(!running);
+  document.getElementById('step').onclick = () => { setRunning(false); stepOnce(); draw(); };
+  document.getElementById('clear').onclick = () => { setRunning(false); grid.fill(0); gen = 0; draw(); };
+  document.getElementById('random').onclick = () => { for (let i = 0; i < grid.length; i++) grid[i] = Math.random() < 0.22 ? 1 : 0; gen = 0; draw(); };
+  document.getElementById('speed').oninput = e => fps = +e.target.value;
+  document.getElementById('pattern').onchange = e => {
+    const p = PATTERNS[e.target.value]; if (!p) return;
+    const ox = Math.floor(COLS / 2) - 18, oy = Math.floor(ROWS / 2) - 5;
+    for (const [x, y] of p) grid[idx(ox + x, oy + y)] = 1;
+    draw(); e.target.value = '';
+  };
+  window.addEventListener('keydown', e => {
+    if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+    if (e.code === 'Space') { e.preventDefault(); setRunning(!running); }
+    if (e.key === 's') { setRunning(false); stepOnce(); draw(); }
+    if (e.key === 'r') document.getElementById('random').click();
+    if (e.key === 'c') document.getElementById('clear').click();
+  });
+
+  draw();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# playwright
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# secrets - never commit these
+.env
+.env.*
+!.env.example
+
+# generated reports
+report.csv
+defects.csv
+*.report.csv
+
+# os / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
